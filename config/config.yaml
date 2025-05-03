@@ -1,0 +1,49 @@
+# Априорные распределения (пример, подстраивайте под задачу)
+priors:
+  weibull:
+    k:   1.5      # shape
+    lam: 80000.0  # scale
+  lognorm:
+    mu:  11.0
+    sigma: 0.4
+  frailty_gamma:
+    a: 0.5
+    b: 0.5
+
+alpha_cvar: 0.05
+
+budget:
+  total:    5_000_000        # ₽
+  periodic: [1_200_000, 1_300_000, 1_250_000, 1_250_000]
+
+downtime:
+  cost_per_hour:  15_000     # ₽
+  sla_penalty:    200_000    # ₽
+
+logistics:
+  max_swaps_per_day: 8
+
+optimization:
+  nsga2:
+    pop_size:  128
+    n_gen:     200
+    seed:      42
+
+simulation:
+  N: 10000
+
+fixed_columns:
+  - "type"
+  - "mfg"
+  - "drive_id"
+  - "model"
+  - "days_alive"
+  - "days_alive.1"
+  - "mtbf"
+  - "errors"
+  - "size_bytes"
+  - "cost_estimate"
+
+feature: {}
+
+seed: 42
