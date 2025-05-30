@@ -1,3 +1,4 @@
 **/output/*
 **/processed/*
 **/final_dataset.json
+**/*.pkl
