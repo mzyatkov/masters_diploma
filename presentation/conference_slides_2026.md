@@ -4,6 +4,7 @@
 - Автор: Михаил
 - Научный руководитель: Александр Стерлигов
 - Формат: научная конференция, 12-15 минут
+- Научная новизна (1 фраза): decision-aware связка `object-wise uncertainty -> Monte Carlo/CVaR -> Pareto policy`, а не изолированное сравнение моделей.
 
 **Инфографика:** схема высокого уровня `данные -> прогноз -> экономика -> Monte Carlo -> Pareto`.
 
@@ -44,17 +45,85 @@
 
 ---
 
-# 4. Данные и воспроизводимый pipeline
+# 4. Существующие решения и исследовательский gap
+
+Что уже есть в литературе и практике:
+
+- survival/reliability подходы (Cox/Weibull/AFT) для time-to-failure;
+- ML-классификация по SMART (GBM/CatBoost/XGBoost) для `failure@H`;
+- cost-sensitive maintenance и stochastic optimization в OR;
+- риск-метрики (VaR/CVaR) в финтех и supply chain, реже в storage maintenance end-to-end.
+- открытые эксплуатационные источники SMART-телеметрии (например, annual Backblaze drive stats) как эмпирическая база для failure analytics.
+
+Проблема большинства работ: разрыв между точностью прогноза и управленческим решением под неопределенностью.
+Важно: сравнение с литературой здесь **качественное** (позиционирование по классам подходов), а не прямой cross-paper benchmark.
+
+Наш фокус: связать `object-wise uncertainty` прогноза с экономическим decision layer и Pareto-выбором policy.
+
+**Инфографика:** таблица `подход -> сильные стороны -> ограничение -> что добавляем`.
+
+---
+
+# 5. Научный вклад и проверяемые тезисы
+
+Исследовательский вопрос (RQ):
+
+- как использовать вероятностный прогноз отказа с object-wise uncertainty, чтобы выбирать policy обслуживания/закупки, устойчивую по `ExpectedProfit` и `CVaR_alpha`?
+
+Тезис T1:
+
+- policy, выбранная по joint-критерию `mean + CVaR`, дает более устойчивый профиль хвостовых потерь, чем оптимизация только по mean.
+
+Тезис T2:
+
+- object-wise uncertainty полезнее глобальной confidence-оценки для экономического decision-making.
+
+Тезис T3:
+
+- лучшая ML-метрика не гарантирует лучшую экономику вне совместной настройки model+policy.
+
+Практический вклад:
+
+- воспроизводимый pipeline от данных до Pareto-front и набора интерпретируемых policy.
+
+**Инфографика:** `гипотеза -> как проверяем -> какой артефакт`.
+
+---
+
+# 6. Данные и воспроизводимый pipeline
 
 - Pipeline реализован end-to-end: `src/pipeline.py`, запуск `scripts/run_full_pipeline.py`.
 - Поддержка реального CSV и синтетики; подготовка датасета: `src/data.py`.
 - Признаки и target на горизонте `H`: `src/features.py`.
+- Анти-утечки: time-aware split и разделение по `disk_id`.
 
 **Инфографика:** таблица «disk_id, SMART, age_days, model_type -> failure@H».
 
 ---
 
-# 5. Модельный стек: baseline и main model
+# 7. Протокол эксперимента и валидность
+
+- Сравнение baseline и main model проводится на одинаковом target и одинаковом split.
+- Метрики прогноза: ROC-AUC, PR-AUC, Brier, ECE, MCE.
+- Decision-оценка: Monte Carlo распределение прибыли, `ExpectedProfit`, `CVaR_alpha`.
+- Все ключевые результаты сохраняются в `reports/` для аудита и воспроизводимости.
+
+Минимальные допущения (явно фиксируются):
+
+- параметрические распределения экономических величин;
+- демонстрационный режим может использовать synthetic data;
+- выводы интерпретируются как pipeline-level, а не как claim «универсального доминирования» одной модели.
+
+Угрозы валидности:
+
+- **внешняя валидность:** переносимость результатов зависит от калибровки экономических распределений под конкретный контур эксплуатации;
+- **внутренняя валидность:** fixed-policy сравнение не заменяет joint-tuning модели и policy.
+
+**Инфографика:** схема `данные/split -> метрики -> economic simulation -> optimization`.
+
+---
+
+# 8. Модельный стек: baseline и main model
 
 - **Baseline:** `Weibull survival` (`src/models/baseline_survival.py`).
 - **Основная модель:** `CatBoost ensemble` с неопределенностью (`src/models/catboost_uncertainty.py`).
@@ -64,7 +133,7 @@
 
 ---
 
-# 6. Object-wise uncertainty в CatBoost
+# 9. Object-wise uncertainty в CatBoost
 
 - Для каждого диска получаем:
   - `mean predicted p_fail`
@@ -75,7 +144,7 @@
 
 ---
 
-# 7. Сравнение качества прогноза (фактические результаты)
+# 10. Сравнение качества прогноза (фактические результаты)
 
 Источник: `reports/model_metrics.csv`.
 
@@ -86,11 +155,16 @@
 
 Вывод: CatBoost устойчиво лучше как вероятностный предиктор.
 
+Статистическая оговорка:
+
+- текущие значения — point estimates для данного прогона;
+- для строгого статистического вывода нужны повторные запуски и bootstrap/CI по ключевым метрикам.
+
 **Инфографика:** `reports/roc.png`, `reports/pr.png`, `reports/calibration.png` (при наличии) + таблица выше.
 
 ---
 
-# 8. Экономическая модель и policy-переменные
+# 11. Экономическая модель и policy-переменные
 
 Decision vector:
 
@@ -108,7 +182,7 @@ Decision vector:
 
 ---
 
-# 9. Monte Carlo и расчет CVaR
+# 12. Monte Carlo и расчет CVaR
 
 Алгоритм для фиксированной policy:
 
@@ -124,7 +198,7 @@ Decision vector:
 
 ---
 
-# 10. Оптимизация mean/CVaR через NSGA-II (pymoo)
+# 13. Оптимизация mean/CVaR через NSGA-II (pymoo)
 
 - Реализация: `src/optimization.py`.
 - Оптимизируем:
@@ -141,7 +215,7 @@ Decision vector:
 
 ---
 
-# 11. Три управленческие политики из оптимизации
+# 14. Три управленческие политики из оптимизации
 
 Источник: `reports/optimization_highlights.json`.
 
@@ -157,7 +231,7 @@ Decision vector:
 
 ---
 
-# 12. Честная проверка на фиксированной policy
+# 15. Честная проверка на фиксированной policy
 
 Источник: `reports/economic_metrics_fixed_policy.csv`.
 
@@ -170,12 +244,13 @@ Decision vector:
 
 - На фиксированной policy Weibull оказался выгоднее в этом конкретном прогоне.
 - Это подчеркивает необходимость **совместной** настройки модели и policy, а не выбора «лучшей модели в вакууме».
+- Важно: по одному прогону нельзя делать сильный универсальный claim о доминировании одной модели.
 
 **Инфографика:** столбчатая диаграмма mean/std.
 
 ---
 
-# 13. Воспроизводимость и практическая применимость
+# 16. Воспроизводимость и практическая применимость
 
 - Запуск end-to-end: `scripts/run_full_pipeline.py`.
 - Оркестрация этапов: `src/pipeline.py`.
@@ -186,11 +261,26 @@ Decision vector:
 
 ---
 
-# 14. Выводы
+# 17. Выводы
 
 - Решение воспроизводимо и прозрачно по всей цепочке: `данные -> прогноз -> policy`.
 - Неопределенность встроена в decision layer через Monte Carlo и CVaR.
 - Pareto-front дает управляемый выбор между доходностью и риском.
+- Научный итог: показана важность совместной оптимизации `модель + policy`, а не сравнения моделей только по ROC/PR.
 - Практический итог: система рекомендует **когда менять диски и как пополнять запас** под нужный риск-профиль.
 
 **Инфографика:** 3 takeaway-блока + roadmap.
+
+---
+
+# 18. Список литературы (ядро)
+
+1. Jardine, Lin, Banjevic. A review on machinery diagnostics and prognostics implementing condition-based maintenance. *Mechanical Systems and Signal Processing*, 2006.
+2. Elkan. The foundations of cost-sensitive learning. *IJCAI*, 2001.
+3. Koenker, Bassett. Regression quantiles. *Econometrica*, 1978.
+4. Rockafellar, Uryasev. Optimization of Conditional Value-at-Risk. *Journal of Risk*, 2000.
+5. Deb et al. A fast and elitist multiobjective genetic algorithm: NSGA-II. *IEEE TEC*, 2002.
+6. Chen, Guestrin. XGBoost: A scalable tree boosting system. *KDD*, 2016.
+7. Prokhorenkova et al. CatBoost: unbiased boosting with categorical features. *NeurIPS*, 2018. URL: https://arxiv.org/abs/1810.11363
+8. Backblaze. Hard Drive Test Data (SMART + failure telemetry). *Backblaze Resource Page*, 2024. URL: https://www.backblaze.com/cloud-storage/resources/hard-drive-test-data
+9. Основные отчеты проекта: `reports/model_metrics.csv`, `reports/pareto_front.csv`, `reports/optimization_highlights.json`.
