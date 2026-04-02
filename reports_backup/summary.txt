@@ -1,0 +1,3 @@
+Model comparison (higher ROC-AUC / lower Brier is better for ranking).
+CatBoost ensemble typically wins on discrimination; check calibration curves.
+Pareto front trades expected profit against tail CVaR of profit.

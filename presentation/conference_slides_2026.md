@@ -1,4 +1,5 @@
-# Байесовский подход к предсказанию отказов внешних накопителей  
+# Байесовский подход к предсказанию отказов внешних накопителей
+
 ## с оптимизацией экономических рисков
 
 - Автор: Михаил
@@ -148,10 +149,12 @@
 
 Источник: `reports/model_metrics.csv`.
 
-| Model | ROC-AUC | PR-AUC | Brier | ECE | MCE |
-|---|---:|---:|---:|---:|---:|
-| weibull_aft | 0.9822 | 0.7630 | 0.0368 | 0.4065 | 0.7880 |
+
+| Model             | ROC-AUC    | PR-AUC     | Brier      | ECE        | MCE        |
+| ----------------- | ---------- | ---------- | ---------- | ---------- | ---------- |
+| weibull_aft       | 0.9822     | 0.7630     | 0.0368     | 0.4065     | 0.7880     |
 | catboost_ensemble | **0.9920** | **0.8688** | **0.0154** | **0.2091** | **0.5457** |
+
 
 Вывод: CatBoost устойчиво лучше как вероятностный предиктор.
 
@@ -219,11 +222,13 @@ Decision vector:
 
 Источник: `reports/optimization_highlights.json`.
 
-| Policy | tau_replace | safety_stock | order_qty |
-|---|---:|---:|---:|
-| risk_neutral | 0.4187 | 3.9410 | 41.2001 |
-| risk_averse | 0.4865 | 4.8353 | 69.3642 |
-| knee | 0.4330 | 4.9205 | 46.6651 |
+
+| Policy       | tau_replace | safety_stock | order_qty |
+| ------------ | ----------- | ------------ | --------- |
+| risk_neutral | 0.4187      | 3.9410       | 41.2001   |
+| risk_averse  | 0.4865      | 4.8353       | 69.3642   |
+| knee         | 0.4330      | 4.9205       | 46.6651   |
+
 
 Интерпретация: более риск-averse политика поднимает порог и заметно увеличивает объем заказа.
 
@@ -235,10 +240,12 @@ Decision vector:
 
 Источник: `reports/economic_metrics_fixed_policy.csv`.
 
-| Model | mean_profit | std_profit |
-|---|---:|---:|
-| weibull_aft | **44,432.41** | **643.81** |
-| catboost_ensemble | 42,018.68 | 875.56 |
+
+| Model             | mean_profit   | std_profit |
+| ----------------- | ------------- | ---------- |
+| weibull_aft       | **44,432.41** | **643.81** |
+| catboost_ensemble | 42,018.68     | 875.56     |
+
 
 Вывод:
 
@@ -281,6 +288,7 @@ Decision vector:
 4. Rockafellar, Uryasev. Optimization of Conditional Value-at-Risk. *Journal of Risk*, 2000.
 5. Deb et al. A fast and elitist multiobjective genetic algorithm: NSGA-II. *IEEE TEC*, 2002.
 6. Chen, Guestrin. XGBoost: A scalable tree boosting system. *KDD*, 2016.
-7. Prokhorenkova et al. CatBoost: unbiased boosting with categorical features. *NeurIPS*, 2018. URL: https://arxiv.org/abs/1810.11363
-8. Backblaze. Hard Drive Test Data (SMART + failure telemetry). *Backblaze Resource Page*, 2024. URL: https://www.backblaze.com/cloud-storage/resources/hard-drive-test-data
+7. Prokhorenkova et al. CatBoost: unbiased boosting with categorical features. *NeurIPS*, 2018. URL: [https://arxiv.org/abs/1810.11363](https://arxiv.org/abs/1810.11363)
+8. Backblaze. Hard Drive Test Data (SMART + failure telemetry). *Backblaze Resource Page*, 2024. URL: [https://www.backblaze.com/cloud-storage/resources/hard-drive-test-data](https://www.backblaze.com/cloud-storage/resources/hard-drive-test-data)
 9. Основные отчеты проекта: `reports/model_metrics.csv`, `reports/pareto_front.csv`, `reports/optimization_highlights.json`.
+
