@@ -1,0 +1,111 @@
+# Default configuration for disk failure + economic optimization pipeline.
+# Paths are relative to project root unless absolute.
+
+project:
+  random_seed: 42
+  horizon_days: 90  # H: binary target and survival prediction horizon
+
+data:
+  # If null, synthetic data is generated. Set to a CSV path for real SMART-like data.
+  csv_path: null
+  synthetic:
+    n_disks: 400
+    snapshots_per_disk_max: 8
+    study_span_days: 730
+  # Time-based fraction of unique disks: train / val / test
+  split:
+    train_frac: 0.6
+    val_frac: 0.2
+    # test_frac implied = 1 - train - val
+
+features:
+  id_column: disk_id
+  time_column: snapshot_date  # used for time ordering before split
+  model_type_column: model_type
+  categorical_columns:
+    - model_type
+  # SMART + numeric metadata (must exist in CSV or synthetic)
+  numeric_columns:
+    - age_days
+    - smart_5_reallocated
+    - smart_197_current_pending
+    - smart_198_offline_uncorrectable
+    - read_errors_rate
+    - temperature_c
+
+model:
+  baseline:
+    penalizer: 0.01
+    l1_ratio: 0.0
+  catboost:
+    iterations: 400
+    depth: 6
+    learning_rate: 0.05
+    loss_function: Logloss
+    bootstrap_ensemble_size: 5
+    bootstrap_sample_frac: 0.85
+    thread_count: -1
+    verbose: false
+
+# Economic parameter distributions: kind + parameters (see src/economic_model.sample_economic_parameters)
+economics:
+  revenue_per_disk_per_period: 120.0  # baseline revenue if disk stays in service (fixed component)
+  # Each entry: { kind: normal|lognormal|fixed|triangular|poisson, ... }
+  purchase_cost:
+    kind: lognormal
+    mean: 4.2
+    sigma: 0.25  # underlying Normal sigma for LogNormal
+  replacement_cost:
+    kind: normal
+    mean: 15.0
+    std: 3.0
+  emergency_replacement_cost:
+    kind: normal
+    mean: 45.0
+    std: 10.0
+  downtime_cost:
+    kind: normal
+    mean: 80.0
+    std: 20.0
+  holding_cost_per_unit_per_period:
+    kind: normal
+    mean: 2.0
+    std: 0.5
+  salvage_value:
+    kind: normal
+    mean: 5.0
+    std: 2.0
+  lead_time_periods:
+    kind: poisson
+    mu: 1.0
+  # Multiplier on hazard for expensive / rare disk types (applied in simulation)
+  reliability_modifier_by_model:
+    budget: 1.15
+    pro: 1.0
+    enterprise: 0.9
+
+monte_carlo:
+  n_samples: 400
+  cvar_alpha: 0.05
+  # Smaller inner loop during NSGA-II (each candidate policy)
+  n_samples_optimization: 80
+
+optimization:
+  # Final plot ``pareto_population_full.png`` has one point per individual → raise this for denser clouds.
+  population_size: 80
+  n_generations: 45
+  seed: 42
+  # Same policy vector always gets the same MC estimate (stable dominance for NSGA-II).
+  deterministic_mc_per_policy: true
+  # Optional annual budget cap on preventive + procurement (null = no constraint)
+  budget_constraint: null
+
+paths:
+  output_dir: outputs
+  reports_dir: reports
+
+# Fixed policy for model comparison (economic metrics in evaluate_models)
+evaluation_policy:
+  tau_replace: 0.35
+  safety_stock: 3
+  order_qty: 10

@@ -1,0 +1,9 @@
+{
+  "mean_profit": 42045.932506096025,
+  "cvar": 39951.63874502833,
+  "policy": {
+    "tau_replace": 0.35,
+    "safety_stock": 3,
+    "order_qty": 10
+  }
+}
