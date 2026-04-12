@@ -92,8 +92,8 @@ monte_carlo:
 
 optimization:
   # Final plot ``pareto_population_full.png`` has one point per individual → raise this for denser clouds.
-  population_size: 160
-  n_generations: 90
+  population_size: 16
+  n_generations: 9
   seed: 42
   # Same policy vector always gets the same MC estimate (stable dominance for NSGA-II).
   deterministic_mc_per_policy: true
@@ -106,6 +106,9 @@ paths:
 
 # Fixed policy for model comparison (economic metrics in evaluate_models)
 evaluation_policy:
-  tau_replace: 0.35
-  safety_stock: 3
-  order_qty: 10
+  tau_replace: 0.4329679724310298
+  safety_stock: 4.920543850634964
+  order_qty: 46.66514813542471
+
+    
+    

@@ -1,9 +1,9 @@
 {
-  "mean_profit": 42045.932506096025,
-  "cvar": 39951.63874502833,
+  "mean_profit": 42728.22497095987,
+  "cvar": 41055.05122384363,
   "policy": {
-    "tau_replace": 0.35,
-    "safety_stock": 3,
-    "order_qty": 10
+    "tau_replace": 0.4329679724310298,
+    "safety_stock": 4.920543850634964,
+    "order_qty": 46.66514813542471
   }
 }
