@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.calibration import calibration_curve
+from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 
 from src.data import DatasetBundle
@@ -35,6 +36,8 @@ def evaluate_models(
     bundle: DatasetBundle,
     baseline: BaselineSurvivalArtifacts,
     catboost: CatBoostUncertaintyArtifacts,
+    X_val: pd.DataFrame | None,
+    y_val: np.ndarray | None,
     X_test: pd.DataFrame,
     y_test: np.ndarray,
     config: dict[str, Any],
@@ -52,8 +55,30 @@ def evaluate_models(
     pred_cb = predict_with_uncertainty(catboost, X_test)
     p_cat = pred_cb["mean"]
 
+    def _fit_iso(y_true: np.ndarray, p_raw: np.ndarray) -> IsotonicRegression | None:
+        if y_true is None or len(np.unique(y_true)) < 2:
+            return None
+        model = IsotonicRegression(out_of_bounds="clip")
+        model.fit(np.clip(p_raw, 1e-6, 1 - 1e-6), y_true)
+        return model
+
+    calibrated_preds: list[tuple[str, np.ndarray]] = []
+    if X_val is not None and y_val is not None:
+        p_base_val = predict_failure_prob_in_horizon(baseline, X_val)
+        p_cat_val = predict_with_uncertainty(catboost, X_val)["mean"]
+
+        iso_base = _fit_iso(y_val, p_base_val)
+        iso_cat = _fit_iso(y_val, p_cat_val)
+        if iso_base is not None:
+            p_base_iso = np.clip(iso_base.predict(np.clip(p_base, 1e-6, 1 - 1e-6)), 1e-6, 1 - 1e-6)
+            calibrated_preds.append(("weibull_aft_isotonic", p_base_iso))
+        if iso_cat is not None:
+            p_cat_iso = np.clip(iso_cat.predict(np.clip(p_cat, 1e-6, 1 - 1e-6)), 1e-6, 1 - 1e-6)
+            calibrated_preds.append(("catboost_ensemble_isotonic", p_cat_iso))
+
     rows = []
-    for name, p in [("weibull_aft", p_base), ("catboost_ensemble", p_cat)]:
+    model_preds = [("weibull_aft", p_base), ("catboost_ensemble", p_cat)] + calibrated_preds
+    for name, p in model_preds:
         auc = roc_auc_score(y_test, p)
         pr = average_precision_score(y_test, p)
         brier = brier_score_loss(y_test, p)
@@ -90,7 +115,7 @@ def evaluate_models(
     econ_cfg = config["economics"]
     mt = bundle.test["model_type"].values if "model_type" in bundle.test.columns else None
     econ_rows = []
-    for name, p in [("weibull_aft", p_base), ("catboost_ensemble", p_cat)]:
+    for name, p in model_preds:
         em = economic_metrics_fixed_policy(
             y_test, p, policy, econ_cfg, rng, n_scenarios=80, model_types=mt
         )

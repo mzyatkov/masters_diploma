@@ -50,6 +50,13 @@ model:
 # Economic parameter distributions: kind + parameters (see src/economic_model.sample_economic_parameters)
 economics:
   revenue_per_disk_per_period: 120.0  # baseline revenue if disk stays in service (fixed component)
+  # Optional one-period inflation proxy (0.0 disables).
+  inflation_rate: 0.0
+  # Optional stressed-market regime: with given probability, multiply key costs.
+  price_shock_probability: 0.0
+  price_shock_multiplier:
+    kind: fixed
+    value: 1.35
   # Each entry: { kind: normal|lognormal|fixed|triangular|poisson, ... }
   purchase_cost:
     kind: lognormal
@@ -92,8 +99,8 @@ monte_carlo:
 
 optimization:
   # Final plot ``pareto_population_full.png`` has one point per individual → raise this for denser clouds.
-  population_size: 16
-  n_generations: 9
+  population_size: 160
+  n_generations: 90
   seed: 42
   # Same policy vector always gets the same MC estimate (stable dominance for NSGA-II).
   deterministic_mc_per_policy: true

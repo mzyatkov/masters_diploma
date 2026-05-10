@@ -63,6 +63,40 @@ def sample_economic_parameters(
         if key in economics_cfg:
             out[key] = _sample_dist(economics_cfg[key], rng)
 
+    # Optional inflation proxy for one-period simulation:
+    # multiply all cost-like terms by (1 + inflation_rate).
+    inflation_rate = float(economics_cfg.get("inflation_rate", 0.0))
+    if inflation_rate > 0:
+        for key in [
+            "purchase_cost",
+            "replacement_cost",
+            "emergency_replacement_cost",
+            "downtime_cost",
+            "holding_cost_per_unit_per_period",
+        ]:
+            if key in out:
+                out[key] *= 1.0 + inflation_rate
+
+    # Optional regime shock: with probability q sample a shock multiplier and
+    # apply it to cost-like terms (co-movement under stressed markets).
+    shock_q = float(economics_cfg.get("price_shock_probability", 0.0))
+    if shock_q > 0 and rng.random() < shock_q:
+        spec = economics_cfg.get("price_shock_multiplier")
+        if isinstance(spec, dict):
+            shock_mult = _sample_dist(spec, rng)
+        else:
+            shock_mult = float(economics_cfg.get("price_shock_multiplier", 1.0))
+        shock_mult = max(0.0, float(shock_mult))
+        for key in [
+            "purchase_cost",
+            "replacement_cost",
+            "emergency_replacement_cost",
+            "downtime_cost",
+            "holding_cost_per_unit_per_period",
+        ]:
+            if key in out:
+                out[key] *= shock_mult
+
     return out
 
 

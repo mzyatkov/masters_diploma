@@ -80,6 +80,8 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
         bundle,
         baseline,
         cat_model,
+        X_val,
+        y_val,
         X_test,
         y_test,
         raw,

@@ -14,7 +14,7 @@ from src.data import prepare_dataset
 from src.evaluation import evaluate_models
 from src.features import feature_matrix_for_catboost, fit_encode_model_type
 from src.models.baseline_survival import BaselineSurvivalArtifacts
-from src.models.catboost_uncertainty import CatBoostUncertaintyArtifacts, load_ensemble
+from src.models.catboost_uncertainty import load_ensemble
 from src.utils import project_root, set_global_seed, setup_logging
 
 
@@ -35,6 +35,8 @@ def main() -> None:
     numeric = list(feat_cfg["numeric_columns"])
     categorical = list(feat_cfg.get("categorical_columns", []))
     X_test, _ = feature_matrix_for_catboost(test, numeric, categorical)
+    X_val, _ = feature_matrix_for_catboost(val, numeric, categorical)
+    y_val = val[bundle.target_binary].values
     y_test = test[bundle.target_binary].values
 
     root = project_root()
@@ -78,6 +80,8 @@ def main() -> None:
         bundle,
         baseline,
         cat,
+        X_val,
+        y_val,
         X_test,
         y_test,
         raw,

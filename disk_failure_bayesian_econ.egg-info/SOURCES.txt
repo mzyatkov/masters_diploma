@@ -19,3 +19,6 @@ src/utils.py
 src/models/__init__.py
 src/models/baseline_survival.py
 src/models/catboost_uncertainty.py
+tests/test_cvar.py
+tests/test_economic_model.py
+tests/test_pipeline_smoke.py
