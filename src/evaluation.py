@@ -32,6 +32,91 @@ def _ece_mce(
     return ece, mce
 
 
+def _point_metrics(y_true: np.ndarray, y_prob: np.ndarray) -> dict[str, float]:
+    """Compute all probabilistic classification metrics used in reports."""
+    auc = roc_auc_score(y_true, y_prob)
+    pr = average_precision_score(y_true, y_prob)
+    brier = brier_score_loss(y_true, y_prob)
+    ece, mce = _ece_mce(y_true, y_prob)
+    return {
+        "roc_auc": float(auc),
+        "pr_auc": float(pr),
+        "brier": float(brier),
+        "ece": float(ece),
+        "mce": float(mce),
+    }
+
+
+def _bootstrap_metric_ci(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    *,
+    n_bootstrap: int,
+    ci_level: float,
+    rng: np.random.Generator,
+) -> dict[str, float]:
+    """Bootstrap CIs for ROC-AUC / PR-AUC / Brier / ECE."""
+    n = len(y_true)
+    if n == 0:
+        raise ValueError("y_true is empty.")
+    if not (0 < ci_level < 1):
+        raise ValueError("ci_level must be in (0,1).")
+
+    point = _point_metrics(y_true, y_prob)
+    keys = list(point.keys())
+    arr = {k: [] for k in keys}
+    for _ in range(n_bootstrap):
+        idx = rng.integers(0, n, size=n)
+        yb = y_true[idx]
+        pb = y_prob[idx]
+        if len(np.unique(yb)) < 2:
+            continue
+        m = _point_metrics(yb, pb)
+        for k in keys:
+            arr[k].append(m[k])
+
+    if len(arr["roc_auc"]) == 0:
+        return {
+            **{f"{k}_value": float(v) for k, v in point.items()},
+            **{f"{k}_ci_low": float(v) for k, v in point.items()},
+            **{f"{k}_ci_high": float(v) for k, v in point.items()},
+        }
+
+    tail = (1.0 - ci_level) / 2.0
+    q_low = 100.0 * tail
+    q_high = 100.0 * (1.0 - tail)
+    out: dict[str, float] = {}
+    for k, v in point.items():
+        vals = np.asarray(arr[k], dtype=float)
+        lo, hi = np.percentile(vals, [q_low, q_high]).tolist()
+        out[f"{k}_value"] = float(v)
+        out[f"{k}_ci_low"] = float(lo)
+        out[f"{k}_ci_high"] = float(hi)
+    return out
+
+
+def _uncertainty_decomposition(ensemble: np.ndarray) -> pd.DataFrame:
+    """
+    Decompose predictive uncertainty:
+    Var(Y) = E[p(1-p)] + Var(p).
+    """
+    ens = np.asarray(ensemble, dtype=float)
+    if ens.ndim != 2:
+        raise ValueError("ensemble must be 2D with shape (n_samples, n_members)")
+    p_mean = np.clip(ens.mean(axis=1), 1e-6, 1 - 1e-6)
+    epistemic = ens.var(axis=1, ddof=0)
+    aleatoric = (ens * (1.0 - ens)).mean(axis=1)
+    total = aleatoric + epistemic
+    return pd.DataFrame(
+        {
+            "mean_pred": p_mean,
+            "aleatoric": aleatoric,
+            "epistemic": epistemic,
+            "total_uncertainty": total,
+        }
+    )
+
+
 def evaluate_models(
     bundle: DatasetBundle,
     baseline: BaselineSurvivalArtifacts,
@@ -79,18 +164,11 @@ def evaluate_models(
     rows = []
     model_preds = [("weibull_aft", p_base), ("catboost_ensemble", p_cat)] + calibrated_preds
     for name, p in model_preds:
-        auc = roc_auc_score(y_test, p)
-        pr = average_precision_score(y_test, p)
-        brier = brier_score_loss(y_test, p)
-        ece, mce = _ece_mce(y_test, p)
+        pm = _point_metrics(y_test, p)
         rows.append(
             {
                 "model": name,
-                "roc_auc": auc,
-                "pr_auc": pr,
-                "brier": brier,
-                "ece": ece,
-                "mce": mce,
+                **pm,
             }
         )
     table = pd.DataFrame(rows)
@@ -122,6 +200,50 @@ def evaluate_models(
         econ_rows.append({"model": name, **em})
     econ_df = pd.DataFrame(econ_rows)
     econ_df.to_csv(reports_dir / "economic_metrics_fixed_policy.csv", index=False)
+
+    reliability_cfg = config.get("reliability", {})
+    n_bootstrap = int(reliability_cfg.get("bootstrap_iterations", 300))
+    ci_level = float(reliability_cfg.get("ci_level", 0.95))
+    boot_rows: list[dict[str, float | str]] = []
+    for name, p in model_preds:
+        ci = _bootstrap_metric_ci(
+            y_test,
+            p,
+            n_bootstrap=n_bootstrap,
+            ci_level=ci_level,
+            rng=rng,
+        )
+        boot_rows.append({"model": name, **ci})
+    boot_df = pd.DataFrame(boot_rows)
+    boot_df.to_csv(reports_dir / "model_metrics_bootstrap_ci.csv", index=False)
+    plots.plot_metric_ci_intervals(
+        boot_df,
+        reports_dir / "model_metrics_ci.png",
+    )
+
+    # CatBoost predictive uncertainty decomposition (instance-wise and summary)
+    if pred_cb.get("ensemble") is not None:
+        dec_df = _uncertainty_decomposition(pred_cb["ensemble"])
+        dec_df.to_csv(reports_dir / "catboost_uncertainty_decomposition.csv", index=False)
+        dec_summary = pd.DataFrame(
+            [
+                {
+                    "aleatoric_mean": float(dec_df["aleatoric"].mean()),
+                    "epistemic_mean": float(dec_df["epistemic"].mean()),
+                    "total_uncertainty_mean": float(dec_df["total_uncertainty"].mean()),
+                    "epistemic_share_mean": float(
+                        (dec_df["epistemic"] / np.clip(dec_df["total_uncertainty"], 1e-12, None)).mean()
+                    ),
+                }
+            ]
+        )
+        dec_summary.to_csv(
+            reports_dir / "catboost_uncertainty_decomposition_summary.csv",
+            index=False,
+        )
+        plots.plot_uncertainty_decomposition(
+            dec_summary.iloc[0].to_dict(), reports_dir / "uncertainty_decomposition.png"
+        )
 
     logger.info("Evaluation complete:\n%s", table.to_string(index=False))
     return table

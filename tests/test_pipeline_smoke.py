@@ -11,7 +11,12 @@ from src.config import load_yaml
 from src.data import prepare_dataset
 from src.features import feature_matrix_for_catboost, fit_encode_model_type
 from src.models.catboost_uncertainty import predict_with_uncertainty, train_catboost_with_uncertainty
-from src.monte_carlo import compute_mean_and_cvar, run_monte_carlo_for_policy
+from src.monte_carlo import (
+    compute_mean_and_cvar,
+    evaluate_policies_with_uncertainty,
+    run_monte_carlo_for_policy,
+)
+from src.optimization import optimize_policy_with_pymoo
 from src.utils import project_root
 
 
@@ -28,6 +33,9 @@ def tiny_config() -> dict:
     raw["monte_carlo"]["n_samples_optimization"] = 20
     raw["optimization"]["population_size"] = 8
     raw["optimization"]["n_generations"] = 2
+    raw["optimization"]["robust"]["enabled"] = True
+    raw["reliability"]["bootstrap_iterations"] = 30
+    raw["reliability"]["pareto_reeval_samples"] = 20
     return raw
 
 
@@ -77,3 +85,35 @@ def test_prepare_and_models(tiny_config: dict) -> None:
     )
     m, c = compute_mean_and_cvar(samples, float(tiny_config["monte_carlo"]["cvar_alpha"]))
     assert np.isfinite(m) and np.isfinite(c)
+
+    # Batch uncertainty-aware policy re-evaluation
+    policies = [
+        {"tau_replace": 0.35, "safety_stock": 3.0, "order_qty": 15.0},
+        {"tau_replace": 0.55, "safety_stock": 6.0, "order_qty": 25.0},
+    ]
+    reevaluated = evaluate_policies_with_uncertainty(
+        pred["mean"],
+        pred["variance"],
+        pred.get("ensemble"),
+        test["model_type"].values,
+        policies,
+        tiny_config["economics"],
+        rng,
+        n_samples=20,
+        alpha=float(tiny_config["monte_carlo"]["cvar_alpha"]),
+        ci_level=float(tiny_config["reliability"]["ci_level"]),
+        n_bootstrap=int(tiny_config["reliability"]["bootstrap_iterations"]),
+    )
+    assert len(reevaluated) == 2
+    assert "expected_profit_ci_low" in reevaluated[0]
+
+    # Robust optimization should run in smoke setup
+    opt = optimize_policy_with_pymoo(
+        pred["mean"],
+        pred["variance"],
+        pred.get("ensemble"),
+        test["model_type"].values,
+        tiny_config,
+        rng,
+    )
+    assert len(opt.pareto_X) > 0

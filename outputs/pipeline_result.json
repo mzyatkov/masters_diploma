@@ -34,54 +34,222 @@
     }
   ],
   "reference_mc": {
-    "mean_profit": 43362.31962720834,
-    "cvar": 42067.65058238833
+    "mean_profit": 43370.62639236845,
+    "cvar": 41976.52932452809
   },
   "pareto": [
     {
-      "tau_replace": 0.43671738923236236,
-      "safety_stock": 2.364690121245634,
-      "order_qty": 30.61939189675275,
-      "expected_profit": 43559.405474531275,
-      "cvar_profit": 42594.29696108834
+      "tau_replace": 0.39757819382494064,
+      "safety_stock": 5.091762876564784,
+      "order_qty": 35.32320369637302,
+      "expected_profit": 43537.04808957701,
+      "cvar_profit": 42753.21752427564
+    }
+  ],
+  "pareto_with_uncertainty": [
+    {
+      "policy_idx": 0,
+      "tau_replace": 0.39757819382494064,
+      "safety_stock": 5.091762876564784,
+      "order_qty": 35.32320369637302,
+      "expected_profit": 43437.019573539634,
+      "cvar_profit": 42001.64644439766,
+      "expected_profit_ci_low": 43376.478017991285,
+      "expected_profit_ci_high": 43505.75342071441,
+      "cvar_profit_ci_low": 41807.09173912104,
+      "cvar_profit_ci_high": 42198.22799398084,
+      "std_profit": 588.3860144369238,
+      "se_expected_profit": 33.9704823822569,
+      "se_cvar_profit": 95.76231815966155,
+      "p5_profit": 42293.33767793325,
+      "p50_profit": 43512.79871092021,
+      "p95_profit": 44229.41131356861,
+      "n_samples": 300,
+      "robust_score": 85183.56975711233
+    }
+  ],
+  "pareto_candidates_with_uncertainty": [
+    {
+      "policy_idx": 0,
+      "tau_replace": 0.39757819382494064,
+      "safety_stock": 5.091762876564784,
+      "order_qty": 35.32320369637302,
+      "expected_profit": 43468.39085378243,
+      "cvar_profit": 42229.43689963662,
+      "expected_profit_ci_low": 43411.651879580924,
+      "expected_profit_ci_high": 43525.83162873301,
+      "cvar_profit_ci_low": 41923.6951328703,
+      "cvar_profit_ci_high": 42518.08555210593,
+      "std_profit": 513.5911450521573,
+      "se_expected_profit": 29.652198584927113,
+      "se_cvar_profit": 164.77544921727124,
+      "p5_profit": 42601.3704037784,
+      "p50_profit": 43514.73179418353,
+      "p95_profit": 44189.34491935729,
+      "n_samples": 300,
+      "robust_score": 85335.34701245122
     },
     {
-      "tau_replace": 0.434414194097176,
-      "safety_stock": 0.981496157952235,
-      "order_qty": 27.61395141010349,
-      "expected_profit": 43538.17093073356,
-      "cvar_profit": 42694.71278349318
+      "policy_idx": 1,
+      "tau_replace": 0.44405649461977387,
+      "safety_stock": 6.847526513931555,
+      "order_qty": 49.21328132010523,
+      "expected_profit": 43393.888749774684,
+      "cvar_profit": 41981.342013009664,
+      "expected_profit_ci_low": 43324.674622458464,
+      "expected_profit_ci_high": 43452.73678435852,
+      "cvar_profit_ci_low": 41797.46268752142,
+      "cvar_profit_ci_high": 42258.3809844364,
+      "std_profit": 545.3896000195598,
+      "se_expected_profit": 31.488083238451516,
+      "se_cvar_profit": 121.94696947341508,
+      "p5_profit": 42394.85698293482,
+      "p50_profit": 43444.25436081623,
+      "p95_profit": 44204.12213885729,
+      "n_samples": 300,
+      "robust_score": 85122.13730997988
     },
     {
-      "tau_replace": 0.5041569334510471,
-      "safety_stock": 1.139976783398607,
-      "order_qty": 30.84592807040606,
-      "expected_profit": 43574.127894773635,
-      "cvar_profit": 42383.46054260219
+      "policy_idx": 2,
+      "tau_replace": 0.3366841600593773,
+      "safety_stock": 1.812700505302229,
+      "order_qty": 27.17350897187231,
+      "expected_profit": 43411.556538490244,
+      "cvar_profit": 41395.89314720319,
+      "expected_profit_ci_low": 43326.56825997986,
+      "expected_profit_ci_high": 43480.505115530905,
+      "cvar_profit_ci_low": 40775.953659495135,
+      "cvar_profit_ci_high": 41968.38876055032,
+      "std_profit": 692.4755003417002,
+      "se_expected_profit": 39.98009165295014,
+      "se_cvar_profit": 331.3947906466651,
+      "p5_profit": 42273.91945578386,
+      "p50_profit": 43521.909662832855,
+      "p95_profit": 44211.88302927294,
+      "n_samples": 300,
+      "robust_score": 84102.521919475
     },
     {
-      "tau_replace": 0.46615132950810373,
-      "safety_stock": 6.287105032296264,
-      "order_qty": 34.85107408093015,
-      "expected_profit": 43541.69383334489,
-      "cvar_profit": 42610.94934186222
+      "policy_idx": 3,
+      "tau_replace": 0.4205561892170586,
+      "safety_stock": 6.762274706397176,
+      "order_qty": 43.244994787343856,
+      "expected_profit": 43349.762690269345,
+      "cvar_profit": 42147.69916296502,
+      "expected_profit_ci_low": 43294.70893499483,
+      "expected_profit_ci_high": 43408.05352766837,
+      "cvar_profit_ci_low": 41954.50844516347,
+      "cvar_profit_ci_high": 42373.443702463774,
+      "std_profit": 528.8949865875556,
+      "se_expected_profit": 30.535766287936873,
+      "se_cvar_profit": 103.09510673336938,
+      "p5_profit": 42426.94111952782,
+      "p50_profit": 43357.75148195107,
+      "p95_profit": 44196.094056982125,
+      "n_samples": 300,
+      "robust_score": 85249.2173801583
+    },
+    {
+      "policy_idx": 4,
+      "tau_replace": 0.36062989388052064,
+      "safety_stock": 0.7043099886952308,
+      "order_qty": 40.784913625399504,
+      "expected_profit": 43382.71166494632,
+      "cvar_profit": 42103.24164974999,
+      "expected_profit_ci_low": 43322.50651933068,
+      "expected_profit_ci_high": 43440.20645958592,
+      "cvar_profit_ci_low": 41858.87438848971,
+      "cvar_profit_ci_high": 42314.017327206355,
+      "std_profit": 564.0723336385931,
+      "se_expected_profit": 32.566731366866215,
+      "se_cvar_profit": 118.21637409204837,
+      "p5_profit": 42432.53263024736,
+      "p50_profit": 43441.76259565287,
+      "p95_profit": 44247.65562840654,
+      "n_samples": 300,
+      "robust_score": 85181.38090782039
+    },
+    {
+      "policy_idx": 5,
+      "tau_replace": 0.44351440970280476,
+      "safety_stock": 0.9944498103571222,
+      "order_qty": 38.21493183311719,
+      "expected_profit": 43402.20768737648,
+      "cvar_profit": 42010.490750473444,
+      "expected_profit_ci_low": 43334.41914802525,
+      "expected_profit_ci_high": 43465.76294511074,
+      "cvar_profit_ci_low": 41671.627143417994,
+      "cvar_profit_ci_high": 42286.30801725642,
+      "std_profit": 545.0278233546719,
+      "se_expected_profit": 31.46719605296556,
+      "se_cvar_profit": 165.014528157591,
+      "p5_profit": 42419.60916961096,
+      "p50_profit": 43449.98358606351,
+      "p95_profit": 44183.64401075287,
+      "n_samples": 300,
+      "robust_score": 85006.04629144324
+    },
+    {
+      "policy_idx": 6,
+      "tau_replace": 0.39975484543244416,
+      "safety_stock": 0.9241693534179964,
+      "order_qty": 38.255353898683126,
+      "expected_profit": 43361.65582976065,
+      "cvar_profit": 42220.87780429622,
+      "expected_profit_ci_low": 43294.70162163129,
+      "expected_profit_ci_high": 43415.1878526015,
+      "cvar_profit_ci_low": 41973.49215782988,
+      "cvar_profit_ci_high": 42405.854743172626,
+      "std_profit": 524.0449383579199,
+      "se_expected_profit": 30.25574862284059,
+      "se_cvar_profit": 114.80736841549364,
+      "p5_profit": 42459.964466054225,
+      "p50_profit": 43403.12915429546,
+      "p95_profit": 44112.31406375782,
+      "n_samples": 300,
+      "robust_score": 85268.19377946117
+    },
+    {
+      "policy_idx": 7,
+      "tau_replace": 0.39730370454879665,
+      "safety_stock": 0.3311807740721273,
+      "order_qty": 34.95705235024193,
+      "expected_profit": 43421.628051582775,
+      "cvar_profit": 42031.03762047028,
+      "expected_profit_ci_low": 43356.77271042854,
+      "expected_profit_ci_high": 43476.642646736116,
+      "cvar_profit_ci_low": 41781.077561624435,
+      "cvar_profit_ci_high": 42341.50499438725,
+      "std_profit": 532.3864970565782,
+      "se_expected_profit": 30.737348738853726,
+      "se_cvar_profit": 140.92466999413534,
+      "p5_profit": 42478.780579894796,
+      "p50_profit": 43487.31993681869,
+      "p95_profit": 44176.03999657576,
+      "n_samples": 300,
+      "robust_score": 85137.85027205298
     }
   ],
   "highlights": {
     "risk_neutral": [
-      0.5041569334510471,
-      1.139976783398607,
-      30.84592807040606
+      0.39757819382494064,
+      5.091762876564784,
+      35.32320369637302
     ],
     "risk_averse": [
-      0.434414194097176,
-      0.981496157952235,
-      27.61395141010349
+      0.39757819382494064,
+      5.091762876564784,
+      35.32320369637302
     ],
     "knee": [
-      0.43671738923236236,
-      2.364690121245634,
-      30.61939189675275
+      0.39757819382494064,
+      5.091762876564784,
+      35.32320369637302
+    ],
+    "robust": [
+      0.39757819382494064,
+      5.091762876564784,
+      35.32320369637302
     ]
   }
 }

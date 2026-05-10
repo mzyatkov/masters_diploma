@@ -15,13 +15,25 @@ from src.evaluation import evaluate_models
 from src.features import feature_matrix_for_catboost, fit_encode_model_type
 from src.models.baseline_survival import train_baseline_survival
 from src.models.catboost_uncertainty import predict_with_uncertainty, train_catboost_with_uncertainty
-from src.monte_carlo import compute_mean_and_cvar, run_monte_carlo_for_policy
+from src.monte_carlo import (
+    compute_mean_and_cvar,
+    evaluate_policies_with_uncertainty,
+    run_monte_carlo_for_policy,
+)
 from src.optimization import optimize_policy_with_pymoo
 from src import plots
 from src.economic_model import PolicyVector
 from src.utils import ensure_dir, get_logger, save_json, set_global_seed, setup_logging
 
 logger = get_logger(__name__)
+
+
+def _nearest_row_idx(candidates: np.ndarray, point: np.ndarray) -> int:
+    """Index of closest candidate vector in Euclidean norm."""
+    if len(candidates) == 0:
+        return 0
+    d = np.linalg.norm(candidates - point[None, :], axis=1)
+    return int(np.argmin(d))
 
 
 def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
@@ -156,6 +168,92 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
     )
     pareto_df.to_csv(rep_dir / "pareto_front.csv", index=False)
 
+    reliability_cfg = raw.get("reliability", {})
+    reevaluate_samples = int(
+        reliability_cfg.get("pareto_reeval_samples", raw["monte_carlo"]["n_samples"])
+    )
+    ci_level = float(reliability_cfg.get("ci_level", 0.95))
+    n_bootstrap = int(reliability_cfg.get("bootstrap_iterations", 300))
+    pareto_policies = [
+        {
+            "tau_replace": float(x[0]),
+            "safety_stock": float(x[1]),
+            "order_qty": float(x[2]),
+        }
+        for x in opt_res.pareto_X
+    ]
+    reevaluated = evaluate_policies_with_uncertainty(
+        mean_p,
+        var_p,
+        ens,
+        model_types,
+        pareto_policies,
+        raw["economics"],
+        rng,
+        reevaluate_samples,
+        alpha=float(raw["monte_carlo"]["cvar_alpha"]),
+        ci_level=ci_level,
+        n_bootstrap=n_bootstrap,
+    )
+    pareto_unc_df = pd.DataFrame(reevaluated)
+    if not pareto_unc_df.empty:
+        pareto_unc_df["robust_score"] = (
+            pareto_unc_df["expected_profit_ci_low"] + pareto_unc_df["cvar_profit_ci_low"]
+        )
+        robust_idx = int(pareto_unc_df["robust_score"].idxmax())
+    else:
+        robust_idx = 0
+    pareto_unc_df.to_csv(rep_dir / "pareto_front_with_uncertainty.csv", index=False)
+
+    # For visualization, broaden beyond strict rank-0 front when it collapses to 1 point.
+    max_rank = int(reliability_cfg.get("plot_candidates_max_rank", 2))
+    top_k = int(reliability_cfg.get("plot_candidates_top_k", 25))
+    pop_F = np.asarray(opt_res.population_F, dtype=float)
+    pop_rank = np.asarray(opt_res.population_rank, dtype=int)
+    pop_X = np.asarray(opt_res.population_X, dtype=float)
+    mask = pop_rank <= max_rank
+    if np.any(mask):
+        cand_X = pop_X[mask]
+        cand_F = pop_F[mask]
+        cand_rank = pop_rank[mask]
+    else:
+        cand_X = pop_X
+        cand_F = pop_F
+        cand_rank = pop_rank
+    if len(cand_X):
+        order = np.lexsort(((cand_F[:, 0] + cand_F[:, 1]), cand_rank))
+        keep = order[: min(top_k, len(order))]
+        viz_X = cand_X[keep]
+    else:
+        viz_X = opt_res.pareto_X
+
+    viz_policies = [
+        {"tau_replace": float(x[0]), "safety_stock": float(x[1]), "order_qty": float(x[2])}
+        for x in viz_X
+    ]
+    viz_eval = evaluate_policies_with_uncertainty(
+        mean_p,
+        var_p,
+        ens,
+        model_types,
+        viz_policies,
+        raw["economics"],
+        rng,
+        reevaluate_samples,
+        alpha=float(raw["monte_carlo"]["cvar_alpha"]),
+        ci_level=ci_level,
+        n_bootstrap=n_bootstrap,
+    )
+    viz_unc_df = pd.DataFrame(viz_eval)
+    if not viz_unc_df.empty:
+        viz_unc_df["robust_score"] = (
+            viz_unc_df["expected_profit_ci_low"] + viz_unc_df["cvar_profit_ci_low"]
+        )
+        viz_robust_idx = int(viz_unc_df["robust_score"].idxmax())
+    else:
+        viz_robust_idx = 0
+    viz_unc_df.to_csv(rep_dir / "pareto_candidates_with_uncertainty.csv", index=False)
+
     plots.plot_pareto_front(
         pareto_obj,
         rep_dir / "pareto_front.png",
@@ -165,6 +263,18 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
             "knee": opt_res.knee_idx,
         },
     )
+    if not viz_unc_df.empty:
+        highlight_idx_viz = {
+            "risk-neutral": _nearest_row_idx(viz_X, opt_res.pareto_X[opt_res.risk_neutral_idx]),
+            "risk-averse (CVaR)": _nearest_row_idx(viz_X, opt_res.pareto_X[opt_res.risk_averse_idx]),
+            "knee": _nearest_row_idx(viz_X, opt_res.pareto_X[opt_res.knee_idx]),
+            "robust": viz_robust_idx,
+        }
+        plots.plot_pareto_front_with_errorbars(
+            viz_unc_df,
+            rep_dir / "pareto_front_errorbars.png",
+            highlight_indices=highlight_idx_viz,
+        )
     plots.plot_pareto_population_full(
         opt_res.population_F,
         opt_res.population_rank,
@@ -183,6 +293,17 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
             }
         ).to_csv(rep_dir / "pareto_population_all.csv", index=False)
 
+    save_json(
+        out_dir / "optimization_highlights_robust.json",
+        {
+            "risk_neutral": opt_res.pareto_X[opt_res.risk_neutral_idx].tolist(),
+            "risk_averse": opt_res.pareto_X[opt_res.risk_averse_idx].tolist(),
+            "knee": opt_res.pareto_X[opt_res.knee_idx].tolist(),
+            "robust_idx": robust_idx,
+            "robust_policy": opt_res.pareto_X[robust_idx].tolist(),
+        },
+    )
+
     summary = (
         "Model comparison (higher ROC-AUC / lower Brier is better for ranking).\n"
         "CatBoost ensemble typically wins on discrimination; check calibration curves.\n"
@@ -194,10 +315,13 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
         "metrics_table": metrics.to_dict(orient="records"),
         "reference_mc": {"mean_profit": mean_profit, "cvar": cvar},
         "pareto": pareto_df.to_dict(orient="records"),
+        "pareto_with_uncertainty": pareto_unc_df.to_dict(orient="records"),
+        "pareto_candidates_with_uncertainty": viz_unc_df.to_dict(orient="records"),
         "highlights": {
             "risk_neutral": opt_res.pareto_X[opt_res.risk_neutral_idx].tolist(),
             "risk_averse": opt_res.pareto_X[opt_res.risk_averse_idx].tolist(),
             "knee": opt_res.pareto_X[opt_res.knee_idx].tolist(),
+            "robust": opt_res.pareto_X[robust_idx].tolist(),
         },
     }
     save_json(out_dir / "pipeline_result.json", result)

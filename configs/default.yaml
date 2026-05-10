@@ -97,6 +97,15 @@ monte_carlo:
   # Smaller inner loop during NSGA-II (each candidate policy)
   n_samples_optimization: 80
 
+reliability:
+  bootstrap_iterations: 300
+  ci_level: 0.95
+  # Additional MC draws to re-score Pareto policies with uncertainty bars
+  pareto_reeval_samples: 300
+  # For error-bar visualization use broader near-Pareto candidate set.
+  plot_candidates_max_rank: 2
+  plot_candidates_top_k: 25
+
 optimization:
   # Final plot ``pareto_population_full.png`` has one point per individual → raise this for denser clouds.
   population_size: 80
@@ -104,6 +113,13 @@ optimization:
   seed: 42
   # Same policy vector always gets the same MC estimate (stable dominance for NSGA-II).
   deterministic_mc_per_policy: true
+  robust:
+    enabled: true
+    # LCB-like robust objective:
+    # robust_mean = mean - k_mean * SE(mean)
+    # robust_cvar = cvar - k_cvar * SE(cvar)
+    k_mean: 1.0
+    k_cvar: 1.0
   # Optional annual budget cap on preventive + procurement (null = no constraint)
   budget_constraint: null
 
@@ -113,9 +129,9 @@ paths:
 
 # Fixed policy for model comparison (economic metrics in evaluate_models)
 evaluation_policy:
-  tau_replace: 0.4329679724310298
-  safety_stock: 4.920543850634964
-  order_qty: 46.66514813542471
+  tau_replace: 0.39757819382494064
+  safety_stock: 5.091762876564784
+  order_qty: 35.32320369637302
 
     
     

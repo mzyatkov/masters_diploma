@@ -38,6 +38,7 @@ class OptimizationResult:
     # Final NSGA-II generation (for visualization of dominated vs non-dominated)
     population_F: np.ndarray  # shape (N, 2), minimization space
     population_rank: np.ndarray  # shape (N,), NSGA-II rank (0 = first front)
+    population_X: np.ndarray  # shape (N, 3), decision vectors
     highlight_indices_pop: dict[str, int]  # label -> row index in population (for scatter)
 
 
@@ -74,6 +75,9 @@ class PolicyProblem(Problem):
         *,
         deterministic_mc_per_policy: bool,
         mc_base_seed: int,
+        robust_enabled: bool,
+        robust_k_mean: float,
+        robust_k_cvar: float,
     ) -> None:
         self._mean = mean_pred
         self._var = variance
@@ -86,6 +90,9 @@ class PolicyProblem(Problem):
         self._budget = budget_constraint
         self._det_mc = deterministic_mc_per_policy
         self._mc_base_seed = int(mc_base_seed)
+        self._robust_enabled = bool(robust_enabled)
+        self._robust_k_mean = float(robust_k_mean)
+        self._robust_k_cvar = float(robust_k_cvar)
 
         super().__init__(
             n_var=3,
@@ -121,8 +128,23 @@ class PolicyProblem(Problem):
                 self._mc_samples,
             )
             mean_profit, cvar = compute_mean_and_cvar(samples, self._alpha)
-            f1[i] = -mean_profit
-            f2[i] = -cvar
+            if self._robust_enabled:
+                std = float(np.std(samples, ddof=1)) if len(samples) > 1 else 0.0
+                se_mean = std / np.sqrt(max(1, len(samples)))
+                k_tail = max(1, int(np.ceil(self._alpha * len(samples))))
+                worst = np.sort(samples)[:k_tail]
+                se_cvar = (
+                    float(np.std(worst, ddof=1)) / np.sqrt(max(1, len(worst)))
+                    if len(worst) > 1
+                    else 0.0
+                )
+                robust_mean = mean_profit - self._robust_k_mean * se_mean
+                robust_cvar = cvar - self._robust_k_cvar * se_cvar
+                f1[i] = -robust_mean
+                f2[i] = -robust_cvar
+            else:
+                f1[i] = -mean_profit
+                f2[i] = -cvar
             if self._budget is not None:
                 # Soft penalty: crude proxy spend = tau-related replacements + orders
                 spend = float(x[i, 0]) * 5000 + float(x[i, 2]) * 50
@@ -158,6 +180,16 @@ def optimize_policy_with_pymoo(
 
     det_mc = bool(opt_cfg.get("deterministic_mc_per_policy", True))
     mc_base = int(opt_cfg.get("seed", 42))
+    robust_cfg = opt_cfg.get("robust", {})
+    robust_enabled = bool(robust_cfg.get("enabled", False))
+    robust_k_mean = float(robust_cfg.get("k_mean", 0.0))
+    robust_k_cvar = float(robust_cfg.get("k_cvar", 0.0))
+    logger.info(
+        "Optimization robust mode: enabled=%s, k_mean=%.3f, k_cvar=%.3f",
+        robust_enabled,
+        robust_k_mean,
+        robust_k_cvar,
+    )
 
     problem = PolicyProblem(
         mean_pred,
@@ -171,6 +203,9 @@ def optimize_policy_with_pymoo(
         budget_f,
         deterministic_mc_per_policy=det_mc,
         mc_base_seed=mc_base,
+        robust_enabled=robust_enabled,
+        robust_k_mean=robust_k_mean,
+        robust_k_cvar=robust_k_cvar,
     )
 
     algorithm = NSGA2(pop_size=int(opt_cfg["population_size"]))
@@ -228,5 +263,6 @@ def optimize_policy_with_pymoo(
         knee_idx=knee_idx,
         population_F=pop_F,
         population_rank=pop_rank,
+        population_X=pop_X,
         highlight_indices_pop=highlight_pop,
     )

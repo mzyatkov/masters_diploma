@@ -186,6 +186,128 @@ def plot_pareto_population_full(
     plt.close()
 
 
+def plot_pareto_front_with_errorbars(
+    pareto_with_uncertainty,
+    path: Path | str,
+    *,
+    labels: tuple[str, str] = ("Expected profit", "CVaR (profit)"),
+    highlight_indices: dict[str, int] | None = None,
+) -> None:
+    """
+    Pareto front with uncertainty bars for both objectives.
+
+    Expected columns:
+    - expected_profit, cvar_profit
+    - expected_profit_ci_low/high, cvar_profit_ci_low/high
+    """
+    import pandas as pd
+
+    df = pd.DataFrame(pareto_with_uncertainty).copy()
+    if df.empty:
+        return
+
+    x = df["expected_profit"].to_numpy(dtype=float)
+    y = df["cvar_profit"].to_numpy(dtype=float)
+    xerr = np.vstack(
+        [
+            x - df["expected_profit_ci_low"].to_numpy(dtype=float),
+            df["expected_profit_ci_high"].to_numpy(dtype=float) - x,
+        ]
+    )
+    yerr = np.vstack(
+        [
+            y - df["cvar_profit_ci_low"].to_numpy(dtype=float),
+            df["cvar_profit_ci_high"].to_numpy(dtype=float) - y,
+        ]
+    )
+
+    plt.figure(figsize=(7.5, 5.5))
+    plt.errorbar(
+        x,
+        y,
+        xerr=xerr,
+        yerr=yerr,
+        fmt="o",
+        color="#2c7fb8",
+        ecolor="#9ecae1",
+        elinewidth=1,
+        capsize=2.5,
+        alpha=0.85,
+        markersize=5,
+    )
+    plt.xlabel(labels[0])
+    plt.ylabel(labels[1])
+    plt.title("Pareto front with uncertainty intervals")
+    if highlight_indices:
+        for label, idx in highlight_indices.items():
+            j = int(idx)
+            if 0 <= j < len(df):
+                plt.scatter(x[j], y[j], s=130, marker="*", label=label, edgecolors="k")
+        plt.legend(fontsize=8)
+    ensure_dir(Path(path).parent)
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close()
+
+
+def plot_metric_ci_intervals(
+    metrics_ci_df,
+    path: Path | str,
+    *,
+    metrics: tuple[str, ...] = ("roc_auc", "pr_auc", "brier", "ece"),
+) -> None:
+    """Plot point estimates with CI intervals for each model."""
+    import pandas as pd
+
+    df = pd.DataFrame(metrics_ci_df).copy()
+    if df.empty:
+        return
+
+    n_rows = len(metrics)
+    fig, axes = plt.subplots(n_rows, 1, figsize=(8.5, 2.2 * n_rows), sharex=False)
+    if n_rows == 1:
+        axes = [axes]
+    for ax, metric in zip(axes, metrics):
+        if f"{metric}_value" not in df.columns:
+            continue
+        y = np.arange(len(df))
+        val = df[f"{metric}_value"].to_numpy(dtype=float)
+        lo = df[f"{metric}_ci_low"].to_numpy(dtype=float)
+        hi = df[f"{metric}_ci_high"].to_numpy(dtype=float)
+        xerr = np.vstack([val - lo, hi - val])
+        ax.errorbar(val, y, xerr=xerr, fmt="o", capsize=3, color="#2c7fb8", ecolor="#9ecae1")
+        ax.set_yticks(y)
+        ax.set_yticklabels(df["model"].astype(str).tolist())
+        ax.set_xlabel(metric)
+        ax.grid(True, alpha=0.25)
+    fig.suptitle("Model metrics with bootstrap confidence intervals")
+    ensure_dir(Path(path).parent)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def plot_uncertainty_decomposition(summary: dict[str, float], path: Path | str) -> None:
+    """Plot mean aleatoric vs epistemic uncertainty share."""
+    ale = float(summary.get("aleatoric_mean", 0.0))
+    epi = float(summary.get("epistemic_mean", 0.0))
+    total = max(ale + epi, 1e-12)
+    shares = np.array([ale / total, epi / total], dtype=float)
+    labels = ["Aleatoric", "Epistemic"]
+
+    plt.figure(figsize=(6.5, 4.5))
+    plt.bar(labels, shares, color=["#74a9cf", "#fd8d3c"])
+    plt.ylim(0.0, 1.0)
+    plt.ylabel("Share of total predictive uncertainty")
+    plt.title("Uncertainty decomposition (CatBoost ensemble)")
+    for i, s in enumerate(shares):
+        plt.text(i, s + 0.02, f"{s:.2%}", ha="center", va="bottom", fontsize=9)
+    ensure_dir(Path(path).parent)
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close()
+
+
 def write_summary_text(path: Path, text: str) -> None:
     ensure_dir(path.parent)
     with open(path, "w", encoding="utf-8") as f:
