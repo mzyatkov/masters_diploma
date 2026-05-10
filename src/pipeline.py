@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.isotonic import IsotonicRegression
 
 from src.config import load_config
 from src.data import prepare_dataset
@@ -95,6 +96,26 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
     var_p = pred["variance"]
     ens = pred.get("ensemble")
     model_types = test["model_type"].values
+
+    # Calibrate predictive probabilities for the decision layer using validation set.
+    # This aligns policy optimization with the best probabilistic estimate.
+    if y_val is not None and len(np.unique(y_val)) >= 2:
+        p_val_raw = predict_with_uncertainty(cat_model, X_val)["mean"]
+        iso = IsotonicRegression(out_of_bounds="clip")
+        iso.fit(np.clip(p_val_raw, 1e-6, 1 - 1e-6), y_val)
+
+        mean_p = np.clip(iso.predict(np.clip(mean_p, 1e-6, 1 - 1e-6)), 1e-6, 1 - 1e-6)
+
+        if ens is not None and ens.ndim == 2:
+            ens_cal = np.empty_like(ens)
+            for j in range(ens.shape[1]):
+                ens_cal[:, j] = np.clip(
+                    iso.predict(np.clip(ens[:, j], 1e-6, 1 - 1e-6)),
+                    1e-6,
+                    1 - 1e-6,
+                )
+            ens = ens_cal
+            var_p = ens.var(axis=1, ddof=0)
 
     # Reference Monte Carlo for default policy
     pol = raw["evaluation_policy"]
