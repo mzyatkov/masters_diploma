@@ -4,5 +4,6 @@
 - Результат: Pareto-front вместо единственного «лучшего» решения.
 - Выбираются risk-neutral, risk-averse и compromise policy.
 - Интерпретация выполняется в координатах доходность-риск.
+- На фронте показываются error bars по Monte Carlo-дисперсии.
 
 ![Pareto-front](slide_12.png)

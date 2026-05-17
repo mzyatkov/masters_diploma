@@ -105,17 +105,22 @@ Weibull AFT используется как интерпретируемый bas
 ## 7) Производился ли анализ надежности прогнозов?
 
 **Коротко (20-40 сек)**  
-Да: использованы ROC-AUC, PR-AUC, Brier и калибровочные метрики ECE/MCE с калибровочными кривыми. Также оценивалась надежность решений через распределение прибыли и CVaR.
+Надежность проверяется на трех уровнях: (1) probabilistic-метрики прогноза (ROC-AUC, PR-AUC, Brier, ECE/MCE) с bootstrap 95%-CI; (2) instance-wise декомпозиция предиктивной неопределенности на aleatoric и epistemic через bootstrapped CatBoost-ансамбль; (3) надежность самого решения — Monte Carlo по экономике и предиктивному распределению, агрегация в `ExpectedProfit` и `CVaR_5%`, плюс робастный Pareto `mean − k·SE`.
 
 **Развернуто (60-90 сек)**  
-Мы оценивали надежность не только как ранжирование, но и как вероятностное качество: Brier и calibration error. Это важно, потому что decision-layer использует именно вероятности, а не только ранги. В текущей итерации добавлена post-hoc isotonic calibration на валидации и повторная отчетность calibrated-метрик для обеих моделей, что делает ответ комиссии про «доверие вероятностям» более сильным.
+Качество ранжирования (AUC) для decision-layer недостаточно, потому что порог `tau_replace` чувствителен к численной величине `p_hat`. Поэтому в `src/evaluation.py` рядом с AUC считаются Brier и ECE, а на валидации подбирается post-hoc isotonic-калибровка; результат — таблица `reports/model_metrics.csv` и калибровочные кривые `reports/calibration.png`. По всем метрикам построены bootstrap-CI (300 итераций, 95%) в `reports/model_metrics_bootstrap_ci.csv` и `reports/model_metrics_ci.png` — это позволяет сравнивать модели не точечно, а интервально. Per-instance неопределенность раскладывается по тождеству `Var(Y) = E[p(1−p)] + Var(p)` в `_uncertainty_decomposition`, сохраняется в `reports/catboost_uncertainty_decomposition*.csv` и используется как сигнал, насколько модели можно доверять конкретно на этом объекте.
 
 **Опора в проекте**  
-- `src/evaluation.py` (метрики + calibrated-варианты)  
-- `reports/model_metrics.csv`, `reports/calibration.png`
+- `src/evaluation.py` (`_point_metrics`, `_bootstrap_metric_ci`, isotonic, `_uncertainty_decomposition`)  
+- `src/monte_carlo.py` (`compute_mean_and_cvar`, `run_monte_carlo_for_policy`)  
+- `src/optimization.py` + `configs/default.yaml` (`reliability`, `optimization.robust`)  
+- `reports/model_metrics.csv`, `reports/model_metrics_bootstrap_ci.csv`, `reports/model_metrics_ci.png`  
+- `reports/calibration.png`  
+- `reports/catboost_uncertainty_decomposition*.csv`, `reports/uncertainty_decomposition.png`  
+- `reports/pareto_candidates_with_uncertainty.csv`, `reports/pareto_front_errorbars.png`
 
 **Нужная доработка**  
-Добавить bootstrap-доверительные интервалы по калибровочным метрикам.
+Заменить binning-оценку ECE на kernel-калибровочную оценку для более узких CI и увеличить размер ансамбля CatBoost для более устойчивой epistemic-компоненты.
 
 ## 8) Неясно с синтетическими данными атрибутов, в реальных данных возможна корреляция атрибутов
 
@@ -135,16 +140,63 @@ Weibull AFT используется как интерпретируемый bas
 ## 9) (Связанный уточняющий вопрос) Как формально защищается тезис «лучшая ML-метрика не всегда лучшая policy»?
 
 **Коротко (20-40 сек)**  
-Через двухуровневое сравнение: сначала probabilistic-метрики, потом экономические outcome-метрики на фиксированной policy и на Pareto-оптимизации.
+Через двухуровневое сравнение: сначала probabilistic-метрики, потом экономические outcome-метрики на фиксированной policy и на Pareto-оптимизации. В текущей версии после исправлений CatBoost лучше и по метрикам прогноза, и по realized-profit, но методологически это проверяется отдельно, а не предполагается автоматически.
 
 **Развернуто (60-90 сек)**  
-В коде и отчетах присутствует явное разделение уровней качества: качество вероятностей и качество управленческого решения. Даже при улучшении ROC/PR может меняться калибровка и форма хвоста распределения прибыли, что влияет на CVaR и выбор policy. Поэтому финальная оценка в работе — decision-aware: по expected profit и CVaR после Monte Carlo.
+В коде и отчетах присутствует явное разделение уровней качества: качество вероятностей и качество управленческого решения. Улучшение ROC/PR не гарантирует улучшение экономики без корректной калибровки и согласованной policy, поэтому проверка делается явно. В текущем прогоне после добавления isotonic-калибровки CatBoost показывает лучший realized-profit (`reports/economic_metrics_fixed_policy_realized.csv`), а в финальной decision-aware оценке используется комбинация `ExpectedProfit` и `CVaR` после Monte Carlo.
 
 **Опора в проекте**  
 - `src/evaluation.py`  
 - `src/monte_carlo.py`  
 - `src/optimization.py`  
-- `reports/economic_metrics_fixed_policy.csv`, `reports/pareto_front.csv`
+- `reports/economic_metrics_fixed_policy.csv`
+- `reports/economic_metrics_fixed_policy_realized.csv`
+- `reports/pareto_front.csv`
 
 **Нужная доработка**  
 Добавить отдельный слайд «ML metrics vs Decision metrics» с одной таблицей контрпримеров.
+
+## 10) Какая гипотеза проверяется в работе и почему ее можно принять?
+
+**Коротко (20-40 сек)**  
+H₀: байесовский контур «вероятностный прогноз с per-instance uncertainty → Monte Carlo → CVaR-оптимизация» **не дает значимого прироста** ни по probabilistic-качеству прогноза, ни по реализованной экономике решения относительно baseline `Weibull AFT + порог по точечной вероятности`. H₁: прирост значим **одновременно** по трем согласованным критериям — probabilistic (bootstrap-CI), реализованная экономика, робастность Pareto. На текущем срезе данных H₀ отвергается по всем трем.
+
+**Развернуто (60-90 сек)**  
+Любой из трех критериев по отдельности недостаточен: высокая AUC без калибровки даст плохой decision-layer; хорошая калибровка без экономики — академическое улучшение; хороший выигрыш в одной MC-реализации может оказаться шумом. Поэтому H₁ принимается только при совпадении трех проверок.
+
+**Критерий 1 — probabilistic (bootstrap 300×, 95% CI, `reports/model_metrics_bootstrap_ci.csv`):**
+
+| метрика | weibull_aft | catboost+iso | вывод |
+|---|---|---|---|
+| Brier | 0.037 [0.022; 0.055] | 0.012 [0.004; 0.022] | CI почти не пересекаются → H₀ отвергается |
+| ECE | 0.41 [0.16; 0.48] | 0.085 [0.044; 0.21] | CI не пересекаются → H₀ отвергается |
+| ROC-AUC | 0.982 [0.966; 0.994] | 0.992 [0.982; 0.999] | CI пересекаются → по AUC отдельно H₀ не отвергается |
+
+Это и есть ответ на «почему важна не только AUC».
+
+**Критерий 2 — реализованная экономика (`reports/economic_metrics_fixed_policy_realized.csv`):**
+
+| модель | realized_profit | preventive | unplanned failures |
+|---|---|---|---|
+| weibull_aft | 42 157 | 0 | 18 |
+| catboost+iso | 43 654 | 17 | 3 |
+
+Отрыв >2σ кросс-сценарной волатильности (std≈500), шестикратное снижение непредотвращенных отказов на одном и том же `y_test`. Методологический штрих: в `reports/economic_metrics_fixed_policy.csv` (MC с симулированными отказами из `p_hat`) Weibull даже «выигрывает», потому что симуляция хвалит модель, занижающую риск; на фактических исходах все наоборот — это эмпирически подтверждает тезис «ML-метрики ≠ decision-метрики».
+
+**Критерий 3 — робастность Pareto (`reports/pareto_candidates_with_uncertainty.csv`, `pareto_front_errorbars.png`):**  
+Каждая Pareto-policy переоценивается 300 MC-сэмплами и получает `expected_profit_ci_low/high`, `cvar_profit_ci_low/high`. NSGA-II в `optimization.robust` оптимизирует LCB `mean − k·SE` и `cvar − k·SE`. Лучшая по `robust_score` policy имеет `expected_profit_ci_low = 43 406` — это **выше realized_profit baseline (42 157) даже по нижней границе**, то есть решение не «выиграло случайно».
+
+**Где H₁ принимается, а где нет (важно, чтобы не поймали на переобобщении):**
+- Принимается на текущем тестовом срезе (синтетика, seed 42, горизонт H=90).
+- Не утверждается обобщение на произвольный реальный парк — нужен прогон на реальном CSV с независимым time-based test.
+- По AUC отдельно — H₀ не отвергается (и мы это признаем); победа идет по Brier/ECE и по экономике.
+
+**Опора в проекте**  
+- `reports/model_metrics_bootstrap_ci.csv`, `reports/model_metrics_ci.png`  
+- `reports/economic_metrics_fixed_policy.csv`, `reports/economic_metrics_fixed_policy_realized.csv`  
+- `reports/pareto_candidates_with_uncertainty.csv`, `reports/pareto_front_errorbars.png`  
+- `src/evaluation.py` (`_bootstrap_metric_ci`, `realized_policy_profit_from_outcomes`)  
+- `src/optimization.py` + `configs/default.yaml` (`optimization.robust`)
+
+**Нужная доработка**  
+Повторить ту же тройную проверку H₀/H₁ на реальном CSV (например, Backblaze) и приложить отдельный отчет — тогда утверждение масштабируется за пределы синтетики.

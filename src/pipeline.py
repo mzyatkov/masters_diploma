@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,27 @@ from src.economic_model import PolicyVector
 from src.utils import ensure_dir, get_logger, save_json, set_global_seed, setup_logging
 
 logger = get_logger(__name__)
+
+
+def _append_debug_log(
+    *,
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict[str, Any],
+    run_id: str = "pre-fix",
+) -> None:
+    payload = {
+        "sessionId": "b4163a",
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    with open("/Users/cobeq/Documents/diploma_v2/.cursor/debug-b4163a.log", "a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=True) + "\n")
 
 
 def _nearest_row_idx(candidates: np.ndarray, point: np.ndarray) -> int:
@@ -155,6 +178,20 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
 
     # Multi-objective optimization (can be heavy; uses same test fleet)
     opt_res = optimize_policy_with_pymoo(mean_p, var_p, ens, model_types, raw, rng)
+    # region agent log
+    _append_debug_log(
+        hypothesis_id="H1",
+        location="src/pipeline.py:opt_result",
+        message="Optimization outputs for plotting contexts",
+        data={
+            "pareto_size": int(len(opt_res.pareto_X)),
+            "population_size": int(len(opt_res.population_X)),
+            "rank0_count": int(np.sum(np.asarray(opt_res.population_rank) == 0)),
+            "robust_enabled": bool(raw.get("optimization", {}).get("robust", {}).get("enabled", False)),
+        },
+        run_id="post-fix",
+    )
+    # endregion
 
     pareto_obj = np.column_stack([-opt_res.pareto_F[:, 0], -opt_res.pareto_F[:, 1]])
     pareto_df = pd.DataFrame(
@@ -226,6 +263,21 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
         viz_X = cand_X[keep]
     else:
         viz_X = opt_res.pareto_X
+    # region agent log
+    _append_debug_log(
+        hypothesis_id="H1",
+        location="src/pipeline.py:viz_selection",
+        message="Candidate subset for errorbar figure",
+        data={
+            "max_rank": int(max_rank),
+            "top_k": int(top_k),
+            "cand_size": int(len(cand_X)),
+            "viz_size": int(len(viz_X)),
+            "using_all_pareto_fallback": bool(len(cand_X) == 0),
+        },
+        run_id="post-fix",
+    )
+    # endregion
 
     viz_policies = [
         {"tau_replace": float(x[0]), "safety_stock": float(x[1]), "order_qty": float(x[2])}
@@ -253,6 +305,32 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
     else:
         viz_robust_idx = 0
     viz_unc_df.to_csv(rep_dir / "pareto_candidates_with_uncertainty.csv", index=False)
+    # region agent log
+    _append_debug_log(
+        hypothesis_id="H4",
+        location="src/pipeline.py:reeval_delta",
+        message="Delta between optimization front and reevaluated candidates",
+        data={
+            "pareto_front_first": (
+                {
+                    "expected_profit": float(pareto_df.iloc[0]["expected_profit"]),
+                    "cvar_profit": float(pareto_df.iloc[0]["cvar_profit"]),
+                }
+                if len(pareto_df)
+                else None
+            ),
+            "viz_first": (
+                {
+                    "expected_profit": float(viz_unc_df.iloc[0]["expected_profit"]),
+                    "cvar_profit": float(viz_unc_df.iloc[0]["cvar_profit"]),
+                }
+                if len(viz_unc_df)
+                else None
+            ),
+        },
+        run_id="post-fix",
+    )
+    # endregion
 
     plots.plot_pareto_front(
         pareto_obj,
@@ -270,10 +348,34 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
             "knee": _nearest_row_idx(viz_X, opt_res.pareto_X[opt_res.knee_idx]),
             "robust": viz_robust_idx,
         }
+        # region agent log
+        _append_debug_log(
+            hypothesis_id="H2",
+            location="src/pipeline.py:highlight_idx_viz",
+            message="Star index mapping in errorbar figure",
+            data={
+                "run_mode": "rank_lte_2_candidates",
+                "errorbar_points": int(len(viz_unc_df)),
+                "highlight_idx_viz": {k: int(v) for k, v in highlight_idx_viz.items()},
+                "viz_points": [
+                    {
+                        "idx": int(i),
+                        "expected_profit": float(viz_unc_df.iloc[i]["expected_profit"]),
+                        "cvar_profit": float(viz_unc_df.iloc[i]["cvar_profit"]),
+                    }
+                    for i in sorted(
+                        set(int(v) for v in highlight_idx_viz.values() if 0 <= int(v) < len(viz_unc_df))
+                    )
+                ],
+            },
+            run_id="post-fix",
+        )
+        # endregion
         plots.plot_pareto_front_with_errorbars(
             viz_unc_df,
             rep_dir / "pareto_front_errorbars.png",
             highlight_indices=highlight_idx_viz,
+            title=f"Near-Pareto candidates (rank<={max_rank}) with uncertainty intervals",
         )
     plots.plot_pareto_population_full(
         opt_res.population_F,
@@ -281,6 +383,22 @@ def run_full_pipeline(config_path: Path | str | None = None) -> dict[str, Any]:
         rep_dir / "pareto_population_full.png",
         highlight_indices_pop=opt_res.highlight_indices_pop or None,
     )
+    # region agent log
+    _append_debug_log(
+        hypothesis_id="H5",
+        location="src/pipeline.py:population_highlights",
+        message="Star rank status in full population figure",
+        data={
+            "highlight_indices_pop": {k: int(v) for k, v in (opt_res.highlight_indices_pop or {}).items()},
+            "highlight_ranks": {
+                k: int(opt_res.population_rank[int(v)])
+                for k, v in (opt_res.highlight_indices_pop or {}).items()
+                if 0 <= int(v) < len(opt_res.population_rank)
+            },
+        },
+        run_id="post-fix",
+    )
+    # endregion
     if len(opt_res.population_F):
         _pop_obj = np.column_stack(
             [-opt_res.population_F[:, 0], -opt_res.population_F[:, 1]]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -12,6 +14,44 @@ from sklearn.metrics import auc, average_precision_score, precision_recall_curve
 from src.utils import ensure_dir
 
 sns.set_theme(style="whitegrid")
+
+
+def _append_debug_log(
+    *,
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict[str, object],
+    run_id: str = "pre-fix",
+) -> None:
+    payload = {
+        "sessionId": "b4163a",
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    with open("/Users/cobeq/Documents/diploma_v2/.cursor/debug-b4163a.log", "a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+
+
+def _dominated_flags(points: np.ndarray) -> np.ndarray:
+    """
+    For maximize objectives, return dominated flag per point.
+    A point i is dominated if there exists j with j >= i in all objectives
+    and strictly better in at least one objective.
+    """
+    n = len(points)
+    flags = np.zeros(n, dtype=bool)
+    for i in range(n):
+        pi = points[i]
+        better_or_equal = np.all(points >= pi[None, :], axis=1)
+        strictly_better = np.any(points > pi[None, :], axis=1)
+        dominated_by_any = np.any(better_or_equal & strictly_better)
+        flags[i] = bool(dominated_by_any)
+    return flags
 
 
 def plot_roc_curves(
@@ -137,6 +177,20 @@ def plot_pareto_population_full(
     obj = np.column_stack([-F[:, 0], -F[:, 1]])
     nd = rnk == 0
     dom = ~nd
+    # region agent log
+    _append_debug_log(
+        hypothesis_id="H5",
+        location="src/plots.py:plot_pareto_population_full",
+        message="Population plot input composition",
+        data={
+            "points": int(len(obj)),
+            "rank0_count": int(np.sum(nd)),
+            "dominated_count": int(np.sum(dom)),
+            "highlight_labels": sorted(list((highlight_indices_pop or {}).keys())),
+        },
+        run_id="pre-fix",
+    )
+    # endregion
 
     plt.figure(figsize=(7, 5))
     if np.any(dom):
@@ -192,6 +246,7 @@ def plot_pareto_front_with_errorbars(
     *,
     labels: tuple[str, str] = ("Expected profit", "CVaR (profit)"),
     highlight_indices: dict[str, int] | None = None,
+    title: str = "Pareto front with uncertainty intervals",
 ) -> None:
     """
     Pareto front with uncertainty bars for both objectives.
@@ -208,6 +263,8 @@ def plot_pareto_front_with_errorbars(
 
     x = df["expected_profit"].to_numpy(dtype=float)
     y = df["cvar_profit"].to_numpy(dtype=float)
+    points = np.column_stack([x, y])
+    dom_flags = _dominated_flags(points)
     xerr = np.vstack(
         [
             x - df["expected_profit_ci_low"].to_numpy(dtype=float),
@@ -237,8 +294,26 @@ def plot_pareto_front_with_errorbars(
     )
     plt.xlabel(labels[0])
     plt.ylabel(labels[1])
-    plt.title("Pareto front with uncertainty intervals")
+    plt.title(title)
     if highlight_indices:
+        # region agent log
+        _append_debug_log(
+            hypothesis_id="H6",
+            location="src/plots.py:plot_pareto_front_with_errorbars",
+            message="Errorbar plot star domination status in plotted set",
+            data={
+                "points": int(len(df)),
+                "dominated_points_in_set": int(np.sum(dom_flags)),
+                "highlight_indices": {k: int(v) for k, v in highlight_indices.items()},
+                "highlight_dominated": {
+                    k: bool(dom_flags[int(v)])
+                    for k, v in highlight_indices.items()
+                    if 0 <= int(v) < len(dom_flags)
+                },
+            },
+            run_id="pre-fix",
+        )
+        # endregion
         for label, idx in highlight_indices.items():
             j = int(idx)
             if 0 <= j < len(df):

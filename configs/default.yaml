@@ -108,8 +108,8 @@ reliability:
 
 optimization:
   # Final plot ``pareto_population_full.png`` has one point per individual → raise this for denser clouds.
-  population_size: 80
-  n_generations: 45
+  population_size: 160
+  n_generations: 90
   seed: 42
   # Same policy vector always gets the same MC estimate (stable dominance for NSGA-II).
   deterministic_mc_per_policy: true

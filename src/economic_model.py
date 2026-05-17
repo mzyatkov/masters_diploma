@@ -8,10 +8,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.utils import get_logger
-
-logger = get_logger(__name__)
-
 
 @dataclass
 class PolicyVector:
@@ -36,6 +32,22 @@ def _sample_dist(spec: dict[str, Any], rng: np.random.Generator) -> float:
         return float(rng.triangular(spec["left"], spec["mode"], spec["right"]))
     if kind == "poisson":
         return float(rng.poisson(spec["mu"]))
+    raise ValueError(f"Unknown distribution kind: {kind}")
+
+
+def _dist_mean(spec: dict[str, Any]) -> float:
+    """Expected value for supported configured distributions."""
+    kind = spec["kind"]
+    if kind == "fixed":
+        return float(spec["value"])
+    if kind == "normal":
+        return float(spec["mean"])
+    if kind == "lognormal":
+        return float(np.exp(spec["mean"] + 0.5 * (spec["sigma"] ** 2)))
+    if kind == "triangular":
+        return float((spec["left"] + spec["mode"] + spec["right"]) / 3.0)
+    if kind == "poisson":
+        return float(spec["mu"])
     raise ValueError(f"Unknown distribution kind: {kind}")
 
 
@@ -97,6 +109,51 @@ def sample_economic_parameters(
             if key in out:
                 out[key] *= shock_mult
 
+    return out
+
+
+def expected_economic_parameters(economics_cfg: dict[str, Any]) -> dict[str, float]:
+    """Deterministic expected economics (used for realized-outcome diagnostics)."""
+    out: dict[str, float] = {}
+    out["revenue_per_disk_per_period"] = float(economics_cfg.get("revenue_per_disk_per_period", 0.0))
+    for key in [
+        "purchase_cost",
+        "replacement_cost",
+        "emergency_replacement_cost",
+        "downtime_cost",
+        "holding_cost_per_unit_per_period",
+        "salvage_value",
+        "lead_time_periods",
+    ]:
+        if key in economics_cfg:
+            out[key] = _dist_mean(economics_cfg[key])
+    inflation_rate = float(economics_cfg.get("inflation_rate", 0.0))
+    if inflation_rate > 0:
+        for key in [
+            "purchase_cost",
+            "replacement_cost",
+            "emergency_replacement_cost",
+            "downtime_cost",
+            "holding_cost_per_unit_per_period",
+        ]:
+            if key in out:
+                out[key] *= 1.0 + inflation_rate
+    shock_q = float(economics_cfg.get("price_shock_probability", 0.0))
+    if shock_q > 0:
+        spec = economics_cfg.get("price_shock_multiplier")
+        shock_mult = _dist_mean(spec) if isinstance(spec, dict) else float(
+            economics_cfg.get("price_shock_multiplier", 1.0)
+        )
+        expected_mult = (1.0 - shock_q) + shock_q * max(0.0, float(shock_mult))
+        for key in [
+            "purchase_cost",
+            "replacement_cost",
+            "emergency_replacement_cost",
+            "downtime_cost",
+            "holding_cost_per_unit_per_period",
+        ]:
+            if key in out:
+                out[key] *= expected_mult
     return out
 
 
@@ -228,3 +285,56 @@ def economic_metrics_fixed_policy(
         )
         profits.append(p)
     return {"mean_profit": float(np.mean(profits)), "std_profit": float(np.std(profits))}
+
+
+def realized_policy_profit_from_outcomes(
+    y_true: np.ndarray,
+    y_pred_proba: np.ndarray,
+    model_types: np.ndarray | pd.Series,
+    policy: PolicyVector,
+    economics: dict[str, float],
+) -> dict[str, float]:
+    """
+    Deterministic one-period profit using observed failures y_true for no-preventive path.
+    """
+    n = len(y_true)
+    if len(y_pred_proba) != n or len(model_types) != n:
+        raise ValueError("y_true, y_pred_proba and model_types must have same length")
+
+    tau = float(policy.tau_replace)
+    safety = float(policy.safety_stock)
+    order_q = int(max(1, round(policy.order_qty)))
+
+    rev = float(economics.get("revenue_per_disk_per_period", 0.0))
+    pc = float(economics["purchase_cost"])
+    rc = float(economics["replacement_cost"])
+    ec = float(economics["emergency_replacement_cost"])
+    dc = float(economics["downtime_cost"])
+    hv = float(economics["holding_cost_per_unit_per_period"])
+    sv = float(economics["salvage_value"])
+
+    p = np.clip(np.asarray(y_pred_proba, dtype=float), 1e-6, 1 - 1e-6)
+    y = np.asarray(y_true, dtype=int)
+    preventive = p > tau
+
+    total_revenue = float(n) * rev
+    total_cost = 0.0
+    spares_consumed = 0
+    preventive_count = int(preventive.sum())
+    fail_count_no_prev = int(((~preventive) & (y == 1)).sum())
+
+    total_cost += float(preventive_count) * (rc + pc - sv)
+    total_cost += float(fail_count_no_prev) * (ec + dc + pc - sv)
+    spares_consumed += preventive_count + fail_count_no_prev
+
+    inventory = safety + order_q - spares_consumed
+    if inventory < safety:
+        total_cost += order_q * pc
+        inventory += order_q
+    total_cost += hv * max(0.0, inventory)
+
+    return {
+        "realized_profit": float(total_revenue - total_cost),
+        "preventive_count": float(preventive_count),
+        "observed_failures_no_preventive": float(fail_count_no_prev),
+    }

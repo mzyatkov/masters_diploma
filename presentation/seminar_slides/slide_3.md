@@ -4,5 +4,6 @@
 - `sigma_i^2` — объектная неопределенность прогноза.
 - `X=(tau_replace, safety_stock, order_qty)` — вектор policy.
 - `Pi(X)` — случайная прибыль при фиксированной policy.
+- Bayesian в работе: практическая аппроксимация (`Bayesian approximation`) через ансамбль, а не полный BNN-вывод.
 
 ![Обозначения модели](slide_3.png)

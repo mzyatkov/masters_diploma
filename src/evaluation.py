@@ -12,7 +12,12 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 
 from src.data import DatasetBundle
-from src.economic_model import PolicyVector, economic_metrics_fixed_policy
+from src.economic_model import (
+    PolicyVector,
+    economic_metrics_fixed_policy,
+    expected_economic_parameters,
+    realized_policy_profit_from_outcomes,
+)
 from src.models.baseline_survival import BaselineSurvivalArtifacts, predict_failure_prob_in_horizon
 from src.models.catboost_uncertainty import CatBoostUncertaintyArtifacts, predict_with_uncertainty
 from src.utils import ensure_dir, get_logger
@@ -193,13 +198,28 @@ def evaluate_models(
     econ_cfg = config["economics"]
     mt = bundle.test["model_type"].values if "model_type" in bundle.test.columns else None
     econ_rows = []
+    realized_rows = []
+    econ_expected = expected_economic_parameters(econ_cfg)
     for name, p in model_preds:
         em = economic_metrics_fixed_policy(
             y_test, p, policy, econ_cfg, rng, n_scenarios=80, model_types=mt
         )
         econ_rows.append({"model": name, **em})
+        if mt is not None:
+            realized = realized_policy_profit_from_outcomes(
+                y_test,
+                p,
+                mt,
+                policy,
+                econ_expected,
+            )
+            realized_rows.append({"model": name, **realized})
     econ_df = pd.DataFrame(econ_rows)
     econ_df.to_csv(reports_dir / "economic_metrics_fixed_policy.csv", index=False)
+    if realized_rows:
+        pd.DataFrame(realized_rows).to_csv(
+            reports_dir / "economic_metrics_fixed_policy_realized.csv", index=False
+        )
 
     reliability_cfg = config.get("reliability", {})
     n_bootstrap = int(reliability_cfg.get("bootstrap_iterations", 300))

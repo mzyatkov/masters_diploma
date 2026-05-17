@@ -1,0 +1,5 @@
+model,realized_profit,preventive_count,observed_failures_no_preventive
+weibull_aft,42157.359190654875,0.0,18.0
+catboost_ensemble,43149.32736643711,26.0,2.0
+weibull_aft_isotonic,42786.130548858884,21.0,6.0
+catboost_ensemble_isotonic,43653.75282581132,17.0,3.0
